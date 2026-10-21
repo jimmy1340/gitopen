@@ -55,9 +55,9 @@ npmRebuild: false
 
 publish:
   provider: github
-  owner: Derek-X-Wang
-  repo: bolt.local
-  private: true
+  owner: jimmy1340
+  repo: gitopen
+  private: false
   releaseType: release
 
 electronDownload:

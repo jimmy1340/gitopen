@@ -121,6 +121,55 @@ export function createSecurityHeaders() {
 }
 
 /**
+ * Returns true for hostnames that must never be reached through server-side proxies:
+ * localhost, private/loopback/link-local ranges and internal-only name suffixes.
+ * Expects a hostname as produced by `new URL(...).hostname` (numeric hosts are already normalised).
+ */
+export function isPrivateOrLocalHost(hostname: string): boolean {
+  const host = hostname
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.$/, '');
+
+  if (!host) {
+    return true;
+  }
+
+  if (
+    host === 'localhost' ||
+    ['.localhost', '.local', '.internal', '.lan', '.home.arpa'].some((s) => host.endsWith(s))
+  ) {
+    return true;
+  }
+
+  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+
+  if (ipv4) {
+    const a = Number(ipv4[1]);
+    const b = Number(ipv4[2]);
+
+    return (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      a >= 224
+    );
+  }
+
+  if (host.includes(':')) {
+    return host === '::' || host === '::1' || /^(fc|fd|fe[89ab])/.test(host) || host.startsWith('::ffff:');
+  }
+
+  // Any remaining all-numeric / hex host is an obfuscated IPv4 literal
+  return /^(0x[0-9a-f]+|\d+)$/.test(host);
+}
+
+/**
  * Validate API key format (basic validation)
  */
 export function validateApiKeyFormat(apiKey: string, provider: string): boolean {
@@ -187,6 +236,17 @@ export function withSecurity<T extends (args: ActionFunctionArgs | LoaderFunctio
     if (options.allowedMethods && !options.allowedMethods.includes(request.method)) {
       return new Response('Method not allowed', {
         status: 405,
+        headers: createSecurityHeaders(),
+      });
+    }
+
+    /*
+     * The app has no authentication backend, so a route that asks for auth can never be satisfied.
+     * Fail closed instead of silently serving it to unauthenticated callers.
+     */
+    if (options.requireAuth) {
+      return new Response('Authentication required', {
+        status: 401,
         headers: createSecurityHeaders(),
       });
     }
