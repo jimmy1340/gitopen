@@ -1,5 +1,6 @@
 import { json } from '@remix-run/cloudflare';
 import type { ActionFunctionArgs, LoaderFunctionArgs } from '@remix-run/cloudflare';
+import { isPrivateOrLocalHost } from '~/lib/security';
 
 // Allowed headers to forward to the target server
 const ALLOW_HEADERS = [
@@ -42,6 +43,13 @@ const EXPOSE_HEADERS = [
   'x-redirected-url',
 ];
 
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const MAX_REDIRECTS = 20;
+
+function isAllowedTarget(target: URL) {
+  return target.protocol === 'https:' && !target.username && !target.password && !isPrivateOrLocalHost(target.hostname);
+}
+
 // Handle all HTTP methods
 export async function action({ request, params }: ActionFunctionArgs) {
   return handleProxyRequest(request, params['*']);
@@ -83,9 +91,20 @@ async function handleProxyRequest(request: Request, path: string | undefined) {
 
     // Reconstruct the target URL with query parameters
     const url = new URL(request.url);
-    const targetURL = `https://${domain}/${remainingPath}${url.search}`;
+    let target: URL;
 
-    console.log('Target URL:', targetURL);
+    try {
+      target = new URL(`https://${domain}/${remainingPath}${url.search}`);
+    } catch {
+      return json({ error: 'Invalid target URL' }, { status: 400 });
+    }
+
+    // Never let the proxy reach loopback/private networks or carry embedded credentials
+    if (!isAllowedTarget(target)) {
+      return json({ error: 'Target host is not allowed' }, { status: 403 });
+    }
+
+    console.log('Target URL:', `${target.origin}${target.pathname}`);
 
     // Filter and prepare headers
     const headers = new Headers();
@@ -98,35 +117,82 @@ async function handleProxyRequest(request: Request, path: string | undefined) {
     }
 
     // Set the host header
-    headers.set('Host', domain);
+    headers.set('Host', target.host);
 
     // Set Git user agent if not already present
     if (!headers.has('user-agent') || !headers.get('user-agent')?.startsWith('git/')) {
       headers.set('User-Agent', 'git/@isomorphic-git/cors-proxy');
     }
 
-    console.log('Request headers:', Object.fromEntries(headers.entries()));
+    // Log header names only: values can contain Authorization tokens
+    console.log('Request headers:', Array.from(headers.keys()));
 
-    // Prepare fetch options
-    const fetchOptions: RequestInit = {
-      method: request.method,
-      headers,
-      redirect: 'follow',
-    };
+    let method = request.method;
+    let body = ['GET', 'HEAD'].includes(method) ? null : request.body;
+    let redirects = 0;
+    let response: Response;
 
-    // Add body for non-GET/HEAD requests
-    if (!['GET', 'HEAD'].includes(request.method)) {
-      fetchOptions.body = request.body;
-      fetchOptions.duplex = 'half';
+    // Inspect every redirect before fetching it; automatic redirects bypass host validation.
+    while (true) {
+      const fetchOptions: RequestInit = {
+        method,
+        headers: new Headers(headers),
+        redirect: 'manual',
+      };
 
-      /*
-       * Note: duplex property is removed to ensure TypeScript compatibility
-       * across different environments and versions
-       */
+      if (body) {
+        fetchOptions.body = body;
+        fetchOptions.duplex = 'half';
+      }
+
+      response = await fetch(target.toString(), fetchOptions);
+
+      const location = response.headers.get('location');
+
+      if (!REDIRECT_STATUSES.has(response.status) || location === null) {
+        break;
+      }
+
+      await response.body?.cancel().catch(() => undefined);
+
+      if (redirects >= MAX_REDIRECTS) {
+        return json({ error: 'Too many redirects' }, { status: 502 });
+      }
+
+      let nextTarget: URL;
+
+      try {
+        nextTarget = new URL(location, target);
+      } catch {
+        return json({ error: 'Invalid redirect URL' }, { status: 400 });
+      }
+
+      if (!isAllowedTarget(nextTarget)) {
+        return json({ error: 'Redirect target host is not allowed' }, { status: 403 });
+      }
+
+      if (
+        ((response.status === 301 || response.status === 302) && method === 'POST') ||
+        (response.status === 303 && !['GET', 'HEAD'].includes(method))
+      ) {
+        method = 'GET';
+        body = null;
+        headers.delete('content-length');
+        headers.delete('content-type');
+      } else if (body) {
+        // Like Fetch, do not replay a streamed upload; buffering large Git packs is unsafe.
+        throw new Error('Cannot follow redirect with a streaming request body');
+      }
+
+      if (nextTarget.origin !== target.origin) {
+        headers.delete('authorization');
+        headers.delete('x-authorization');
+      }
+
+      headers.set('Host', nextTarget.host);
+      target = nextTarget;
+      redirects++;
     }
-
-    // Forward the request to the target URL
-    const response = await fetch(targetURL, fetchOptions);
 
     console.log('Response status:', response.status);
 
@@ -152,11 +218,11 @@ async function handleProxyRequest(request: Request, path: string | undefined) {
     }
 
     // If the response was redirected, add the x-redirected-url header
-    if (response.redirected) {
-      responseHeaders.set('x-redirected-url', response.url);
+    if (redirects > 0) {
+      responseHeaders.set('x-redirected-url', target.toString());
     }
 
-    console.log('Response headers:', Object.fromEntries(responseHeaders.entries()));
+    console.log('Response headers:', Array.from(responseHeaders.keys()));
 
     // Return the response with the target's body stream piped directly
     return new Response(response.body, {
