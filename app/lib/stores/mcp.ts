@@ -106,7 +106,9 @@ async function updateServerConfig(config: MCPConfig) {
   });
 
   if (!response.ok) {
-    throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+    const body = (await response.json().catch(() => undefined)) as { error?: string } | undefined;
+
+    throw new Error(body?.error ?? `Server responded with ${response.status}: ${response.statusText}`);
   }
 
   const data = (await response.json()) as MCPServerTools;
