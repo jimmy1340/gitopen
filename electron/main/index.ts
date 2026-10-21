@@ -75,6 +75,11 @@ declare global {
   // Load any existing cookies from ElectronStore, set as cookie
   await initCookies();
 
+  // The packaged server runs inside this desktop process only, so local STDIO MCP servers are safe here
+  if (!process.env.MCP_ALLOW_STDIO) {
+    process.env.MCP_ALLOW_STDIO = 'true';
+  }
+
   const serverBuild = await loadServerBuild();
 
   protocol.handle('http', async (req) => {
