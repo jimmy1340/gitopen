@@ -1,5 +1,3 @@
-'use client';
-
 import * as React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { classNames } from '~/utils/classNames';
@@ -21,7 +19,7 @@ const badgeVariants = cva(
         danger: 'bg-red-500/10 text-red-600 dark:text-red-400',
         info: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
         subtle:
-          'border border-bolt-elements-borderColor/30 dark:border-bolt-elements-borderColor-dark/30 bg-white/50 dark:bg-bolt-elements-background-depth-4/50 backdrop-blur-sm text-bolt-elements-textSecondary dark:text-bolt-elements-textSecondary-dark',
+          'border border-bolt-elements-borderColor/30 bg-white/50 dark:bg-bolt-elements-background-depth-4/50 backdrop-blur-sm text-bolt-elements-textSecondary',
       },
       size: {
         default: 'rounded-full px-2.5 py-0.5 text-xs font-semibold',
