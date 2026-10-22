@@ -1,7 +1,3 @@
-/*
- * @ts-nocheck
- * Preventing TS checks with files presented in the video for a better presentation.
- */
 import { MODEL_REGEX, PROVIDER_REGEX } from '~/utils/constants';
 import { Markdown } from './Markdown';
 import { useStore } from '@nanostores/react';
@@ -75,21 +71,24 @@ export function UserMessage({ content, parts }: UserMessageProps) {
 
   return (
     <div className="flex flex-col bg-accent-500/10 backdrop-blur-sm px-5 p-3.5 w-auto rounded-lg ml-auto">
-      <div className="flex gap-3.5 mb-4">
-        {images.map((item, index) => (
-          <div className="relative flex rounded-lg border border-bolt-elements-borderColor overflow-hidden">
-            <div className="h-16 w-16 bg-transparent outline-none">
-              <img
-                key={index}
-                src={`data:${item.mimeType};base64,${item.data}`}
-                alt={`Image ${index + 1}`}
-                className="h-full w-full rounded-lg"
-                style={{ objectFit: 'fill' }}
-              />
+      {images.length > 0 && (
+        <div className="flex gap-3.5 mb-4">
+          {images.map((item, index) => (
+            <div
+              key={index}
+              className="relative flex rounded-lg border border-bolt-elements-borderColor overflow-hidden"
+            >
+              <div className="h-16 w-16 bg-transparent outline-none">
+                <img
+                  src={`data:${item.mimeType};base64,${item.data}`}
+                  alt={`Image ${index + 1}`}
+                  className="h-full w-full rounded-lg object-cover"
+                />
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
       <Markdown html>{textContent}</Markdown>
     </div>
   );
