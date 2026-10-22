@@ -580,7 +580,11 @@ export const ChatImpl = memo(
       const storedApiKeys = Cookies.get('apiKeys');
 
       if (storedApiKeys) {
-        setApiKeys(JSON.parse(storedApiKeys));
+        try {
+          setApiKeys(JSON.parse(storedApiKeys));
+        } catch (error) {
+          console.error('Failed to parse stored apiKeys cookie:', error);
+        }
       }
     }, []);
 
