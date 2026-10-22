@@ -315,7 +315,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
               onClick={() => props.setIsModelSettingsCollapsed(!props.isModelSettingsCollapsed)}
               disabled={!props.providerList || props.providerList.length === 0}
             >
-              <div className={`i-ph:caret-${props.isModelSettingsCollapsed ? 'right' : 'down'} text-lg`} />
+              <div className={`${props.isModelSettingsCollapsed ? 'i-ph:caret-right' : 'i-ph:caret-down'} text-lg`} />
               {props.isModelSettingsCollapsed ? <span className="text-xs">{props.model}</span> : <span />}
             </IconButton>
           </div>

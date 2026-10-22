@@ -235,7 +235,7 @@ export const ControlPanel = ({ open, onClose }: ControlPanelProps) => {
           >
             <div
               className={classNames(
-                'w-[1200px] h-[90vh]',
+                'w-[1200px] max-w-[95vw] h-[90vh] max-h-[95vh]',
                 'bg-bolt-elements-background-depth-1',
                 'rounded-2xl shadow-2xl',
                 'border border-bolt-elements-borderColor',
@@ -274,6 +274,8 @@ export const ControlPanel = ({ open, onClose }: ControlPanelProps) => {
                     {/* Close Button */}
                     <button
                       onClick={handleClose}
+                      title="Close"
+                      aria-label="Close"
                       className="flex items-center justify-center w-8 h-8 rounded-full bg-transparent hover:bg-purple-500/10 dark:hover:bg-purple-500/20 group transition-all duration-200"
                     >
                       <div className="i-ph:x w-4 h-4 text-gray-500 dark:text-gray-400 group-hover:text-purple-500 transition-colors" />

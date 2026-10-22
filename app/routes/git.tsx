@@ -7,7 +7,10 @@ import { Header } from '~/components/header/Header';
 import BackgroundRays from '~/components/ui/BackgroundRays';
 
 export const meta: MetaFunction = () => {
-  return [{ title: 'Bolt' }, { name: 'description', content: 'Talk with Bolt, an AI assistant from StackBlitz' }];
+  return [
+    { title: 'GitOpen - Import Repository' },
+    { name: 'description', content: 'Import and build your Git repository with GitOpen' },
+  ];
 };
 
 export async function loader(args: LoaderFunctionArgs) {
