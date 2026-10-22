@@ -1,3 +1,5 @@
+export const CURRENT_VERSION = '1.0.2';
+
 export interface UpdateCheckResult {
   available: boolean;
   version: string;
@@ -36,28 +38,14 @@ function compareVersions(v1: string, v2: string): number {
 
 export const checkForUpdates = async (): Promise<UpdateCheckResult> => {
   try {
-    // Get the current version from local package.json
-    const packageResponse = await fetch('/package.json');
-
-    if (!packageResponse.ok) {
-      throw new Error('Failed to fetch local package.json');
-    }
-
-    const packageData = (await packageResponse.json()) as PackageJson;
-
-    if (!packageData.version || typeof packageData.version !== 'string') {
-      throw new Error('Invalid package.json format: missing or invalid version');
-    }
-
-    const currentVersion = packageData.version;
+    // Get the current version from package.json
+    const currentVersion = CURRENT_VERSION;
 
     /*
      * Get the latest version from GitHub's main branch package.json
      * Using raw.githubusercontent.com which doesn't require authentication
      */
-    const latestPackageResponse = await fetch(
-      'https://raw.githubusercontent.com/stackblitz-labs/bolt.diy/main/package.json',
-    );
+    const latestPackageResponse = await fetch('https://raw.githubusercontent.com/jimmy1340/gitopen/main/package.json');
 
     if (!latestPackageResponse.ok) {
       throw new Error(`Failed to fetch latest package.json: ${latestPackageResponse.status}`);
