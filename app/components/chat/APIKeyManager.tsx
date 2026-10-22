@@ -24,7 +24,12 @@ export function getApiKeysFromCookies() {
     parsedKeys = apiKeyMemoizeCache[storedApiKeys];
 
     if (!parsedKeys) {
-      parsedKeys = apiKeyMemoizeCache[storedApiKeys] = JSON.parse(storedApiKeys);
+      try {
+        parsedKeys = apiKeyMemoizeCache[storedApiKeys] = JSON.parse(storedApiKeys);
+      } catch (error) {
+        console.error('Failed to parse apiKeys cookie:', error);
+        parsedKeys = {};
+      }
     }
   }
 
@@ -153,7 +158,7 @@ export const APIKeyManager: React.FC<APIKeyManagerProps> = ({ provider, apiKey, 
             }
             {provider?.getApiKeyLink && !apiKey && (
               <IconButton
-                onClick={() => window.open(provider?.getApiKeyLink)}
+                onClick={() => window.open(provider?.getApiKeyLink, '_blank')}
                 title="Get API Key"
                 className="bg-purple-500/10 hover:bg-purple-500/20 text-purple-500 flex items-center gap-2"
               >
