@@ -4,23 +4,12 @@ import UnoCSS from 'unocss/vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { optimizeCssModules } from 'vite-plugin-optimize-css-modules';
 import tsconfigPaths from 'vite-tsconfig-paths';
-
-import { execSync } from 'child_process';
-
-// Get git hash with fallback
-const getGitHash = () => {
-  try {
-    return execSync('git rev-parse --short HEAD').toString().trim();
-  } catch {
-    return 'no-git-info';
-  }
-};
+import { gitDefineConstants } from './scripts/git-metadata';
 
 export default defineConfig((config) => {
   return {
     define: {
-      __COMMIT_HASH: JSON.stringify(getGitHash()),
-      __APP_VERSION: JSON.stringify(process.env.npm_package_version),
+      ...gitDefineConstants(),
     },
     build: {
       target: 'esnext',

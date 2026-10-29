@@ -118,7 +118,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         },
       });
     } catch (error: unknown) {
-      console.log(error);
+      logger.error('LLM stream failed', error instanceof Error ? error.message : error);
 
       if (error instanceof Error && error.message?.includes('API key')) {
         throw new Response('Invalid or missing API key', {
@@ -178,9 +178,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
 
       logger.info(`Generating response Provider: ${provider.name}, Model: ${modelDetails.name}`);
 
-      // DEBUG: Log reasoning model detection
       const isReasoning = isReasoningModel(modelDetails.name);
-      logger.info(`DEBUG: Model "${modelDetails.name}" detected as reasoning model: ${isReasoning}`);
 
       // Use maxCompletionTokens for reasoning models (o1, GPT-5), maxTokens for traditional models
       const tokenParams = isReasoning ? { maxCompletionTokens: dynamicMaxTokens } : { maxTokens: dynamicMaxTokens };
@@ -209,26 +207,6 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         ? { ...baseParams, temperature: 1 } // Set to 1 for reasoning models (only supported value)
         : { ...baseParams, temperature: 0 };
 
-      // DEBUG: Log final parameters
-      logger.info(
-        `DEBUG: Final params for model "${modelDetails.name}":`,
-        JSON.stringify(
-          {
-            isReasoning,
-            hasTemperature: 'temperature' in finalParams,
-            hasMaxTokens: 'maxTokens' in finalParams,
-            hasMaxCompletionTokens: 'maxCompletionTokens' in finalParams,
-            paramKeys: Object.keys(finalParams).filter((key) => !['model', 'messages', 'system'].includes(key)),
-            tokenParams,
-            finalParams: Object.fromEntries(
-              Object.entries(finalParams).filter(([key]) => !['model', 'messages', 'system'].includes(key)),
-            ),
-          },
-          null,
-          2,
-        ),
-      );
-
       const result = await generateText(finalParams);
       logger.info(`Generated response`);
 
@@ -239,7 +217,7 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
         },
       });
     } catch (error: unknown) {
-      console.log(error);
+      logger.error('LLM generate failed', error instanceof Error ? error.message : error);
 
       const errorResponse = {
         error: true,

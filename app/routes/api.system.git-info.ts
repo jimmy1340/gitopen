@@ -5,6 +5,7 @@ interface GitInfo {
     commitHash: string;
     branch: string;
     commitTime: string;
+    commitMessage: string;
     author: string;
     email: string;
     remoteUrl: string;
@@ -47,23 +48,11 @@ interface GitHubGist {
   description: string;
 }
 
-// These values will be replaced at build time
-declare const __COMMIT_HASH: string;
-declare const __GIT_BRANCH: string;
-declare const __GIT_COMMIT_TIME: string;
-declare const __GIT_AUTHOR: string;
-declare const __GIT_EMAIL: string;
-declare const __GIT_REMOTE_URL: string;
-declare const __GIT_REPO_NAME: string;
-
-/*
- * Remove unused variable to fix linter error
- * declare const __GIT_REPO_URL: string;
- */
+function readBuildConstant(kind: string, value: string, fallback: string): string {
+  return kind === 'string' && value.length > 0 ? value : fallback;
+}
 
 export const loader: LoaderFunction = async ({ request, context }: LoaderFunctionArgs & { context: AppContext }) => {
-  console.log('Git info API called with URL:', request.url);
-
   // Handle CORS preflight requests
   if (request.method === 'OPTIONS') {
     return new Response(null, {
@@ -77,8 +66,6 @@ export const loader: LoaderFunction = async ({ request, context }: LoaderFunctio
 
   const { searchParams } = new URL(request.url);
   const action = searchParams.get('action');
-
-  console.log('Git info action:', action);
 
   if (action === 'getUser' || action === 'getRepos' || action === 'getOrgs' || action === 'getActivity') {
     // Use server-side token instead of client-side token
@@ -94,11 +81,6 @@ export const loader: LoaderFunction = async ({ request, context }: LoaderFunctio
     const headerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
 
     const token = serverGithubToken || headerToken || cookieToken;
-
-    console.log(
-      'Using GitHub token from:',
-      serverGithubToken ? 'server env' : headerToken ? 'auth header' : cookieToken ? 'cookie' : 'none',
-    );
 
     if (!token) {
       console.error('No GitHub token available');
@@ -251,13 +233,25 @@ export const loader: LoaderFunction = async ({ request, context }: LoaderFunctio
       }
 
       if (action === 'getActivity') {
-        const username = request.headers
+        const rawUsername = request.headers
           .get('Cookie')
           ?.split(';')
           .find((cookie) => cookie.trim().startsWith('githubUsername='))
-          ?.split('=')[1];
+          ?.split('=')
+          .slice(1)
+          .join('=');
 
-        if (!username) {
+        let username = rawUsername;
+
+        if (rawUsername) {
+          try {
+            username = decodeURIComponent(rawUsername);
+          } catch {
+            username = rawUsername;
+          }
+        }
+
+        if (!username || !/^[A-Za-z0-9-]+$/.test(username)) {
           console.error('GitHub username not found in cookies');
           return json(
             { error: 'GitHub username not found in cookies' },
@@ -271,12 +265,15 @@ export const loader: LoaderFunction = async ({ request, context }: LoaderFunctio
           );
         }
 
-        const response = await fetch(`https://api.github.com/users/${username}/events?per_page=30`, {
-          headers: {
-            Accept: 'application/vnd.github.v3+json',
-            Authorization: `Bearer ${token}`,
+        const response = await fetch(
+          `https://api.github.com/users/${encodeURIComponent(username)}/events?per_page=30`,
+          {
+            headers: {
+              Accept: 'application/vnd.github.v3+json',
+              Authorization: `Bearer ${token}`,
+            },
           },
-        });
+        );
 
         if (!response.ok) {
           console.error('GitHub activity API error:', response.status);
@@ -312,13 +309,42 @@ export const loader: LoaderFunction = async ({ request, context }: LoaderFunctio
 
   const gitInfo: GitInfo = {
     local: {
-      commitHash: typeof __COMMIT_HASH !== 'undefined' ? __COMMIT_HASH : 'development',
-      branch: typeof __GIT_BRANCH !== 'undefined' ? __GIT_BRANCH : 'main',
-      commitTime: typeof __GIT_COMMIT_TIME !== 'undefined' ? __GIT_COMMIT_TIME : new Date().toISOString(),
-      author: typeof __GIT_AUTHOR !== 'undefined' ? __GIT_AUTHOR : 'development',
-      email: typeof __GIT_EMAIL !== 'undefined' ? __GIT_EMAIL : 'development@local',
-      remoteUrl: typeof __GIT_REMOTE_URL !== 'undefined' ? __GIT_REMOTE_URL : 'local',
-      repoName: typeof __GIT_REPO_NAME !== 'undefined' ? __GIT_REPO_NAME : 'gitopen',
+      commitHash: readBuildConstant(
+        typeof __COMMIT_HASH,
+        typeof __COMMIT_HASH === 'string' ? __COMMIT_HASH : '',
+        'development',
+      ),
+      branch: readBuildConstant(typeof __GIT_BRANCH, typeof __GIT_BRANCH === 'string' ? __GIT_BRANCH : '', 'main'),
+      commitTime: readBuildConstant(
+        typeof __GIT_COMMIT_TIME,
+        typeof __GIT_COMMIT_TIME === 'string' ? __GIT_COMMIT_TIME : '',
+        new Date().toISOString(),
+      ),
+      commitMessage: readBuildConstant(
+        typeof __GIT_COMMIT_MESSAGE,
+        typeof __GIT_COMMIT_MESSAGE === 'string' ? __GIT_COMMIT_MESSAGE : '',
+        'unknown',
+      ),
+      author: readBuildConstant(
+        typeof __GIT_AUTHOR,
+        typeof __GIT_AUTHOR === 'string' ? __GIT_AUTHOR : '',
+        'development',
+      ),
+      email: readBuildConstant(
+        typeof __GIT_EMAIL,
+        typeof __GIT_EMAIL === 'string' ? __GIT_EMAIL : '',
+        'development@local',
+      ),
+      remoteUrl: readBuildConstant(
+        typeof __GIT_REMOTE_URL,
+        typeof __GIT_REMOTE_URL === 'string' ? __GIT_REMOTE_URL : '',
+        'local',
+      ),
+      repoName: readBuildConstant(
+        typeof __GIT_REPO_NAME,
+        typeof __GIT_REPO_NAME === 'string' ? __GIT_REPO_NAME : '',
+        'gitopen',
+      ),
     },
     timestamp: new Date().toISOString(),
   };
