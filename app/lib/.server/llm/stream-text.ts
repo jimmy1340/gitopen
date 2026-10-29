@@ -256,23 +256,6 @@ export async function streamText(props: {
         )
       : options || {};
 
-  // DEBUG: Log filtered options
-  logger.info(
-    `DEBUG STREAM: Options filtering for model "${modelDetails.name}":`,
-    JSON.stringify(
-      {
-        isReasoning,
-        originalOptions: options || {},
-        filteredOptions,
-        originalOptionsKeys: options ? Object.keys(options) : [],
-        filteredOptionsKeys: Object.keys(filteredOptions),
-        removedParams: options ? Object.keys(options).filter((key) => !(key in filteredOptions)) : [],
-      },
-      null,
-      2,
-    ),
-  );
-
   const streamParams = {
     model: provider.getModelInstance({
       model: modelDetails.name,
@@ -288,24 +271,6 @@ export async function streamText(props: {
     // Set temperature to 1 for reasoning models (required by OpenAI API)
     ...(isReasoning ? { temperature: 1 } : {}),
   };
-
-  // DEBUG: Log final streaming parameters
-  logger.info(
-    `DEBUG STREAM: Final streaming params for model "${modelDetails.name}":`,
-    JSON.stringify(
-      {
-        hasTemperature: 'temperature' in streamParams,
-        hasMaxTokens: 'maxTokens' in streamParams,
-        hasMaxCompletionTokens: 'maxCompletionTokens' in streamParams,
-        paramKeys: Object.keys(streamParams).filter((key) => !['model', 'messages', 'system'].includes(key)),
-        streamParams: Object.fromEntries(
-          Object.entries(streamParams).filter(([key]) => !['model', 'messages', 'system'].includes(key)),
-        ),
-      },
-      null,
-      2,
-    ),
-  );
 
   return await _streamText(streamParams);
 }

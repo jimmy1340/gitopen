@@ -20,6 +20,7 @@
     "skipLibCheck": true,
     "verbatimModuleSyntax": true,
     "forceConsistentCasingInFileNames": true,
+    "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": {
       "~/*": ["./app/*"]

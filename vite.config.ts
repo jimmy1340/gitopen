@@ -5,6 +5,7 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { optimizeCssModules } from 'vite-plugin-optimize-css-modules';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import * as dotenv from 'dotenv';
+import { gitDefineConstants } from './scripts/git-metadata';
 
 // Load environment variables from multiple files
 dotenv.config({ path: '.env.local' });
@@ -15,6 +16,7 @@ export default defineConfig((config) => {
   return {
     define: {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV),
+      ...gitDefineConstants(),
     },
     build: {
       target: 'esnext',

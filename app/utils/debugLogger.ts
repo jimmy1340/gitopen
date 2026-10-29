@@ -922,7 +922,7 @@ class DebugLogger {
           remoteUrl: gitInfoTyped.local?.remoteUrl,
           lastCommit: gitInfoTyped.local
             ? {
-                message: 'Latest commit',
+                message: gitInfoTyped.local.commitMessage || 'Latest commit',
                 date: gitInfoTyped.local.commitTime,
                 author: gitInfoTyped.local.author,
               }
@@ -1185,7 +1185,11 @@ function createDebugSummary(data: DebugLogData): string {
           `Working Directory: ${data.appInfo.gitInfo.isDirty ? 'Dirty' : 'Clean'}`,
           data.appInfo.gitInfo.remoteUrl ? `Remote: ${data.appInfo.gitInfo.remoteUrl}` : '',
           data.appInfo.gitInfo.lastCommit
-            ? `Last Commit: ${data.appInfo.gitInfo.lastCommit.message.substring(0, 50)}...`
+            ? `Last Commit: ${
+                data.appInfo.gitInfo.lastCommit.message.length > 50
+                  ? `${data.appInfo.gitInfo.lastCommit.message.substring(0, 50)}...`
+                  : data.appInfo.gitInfo.lastCommit.message
+              }`
             : '',
         ]
           .filter(Boolean)

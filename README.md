@@ -1,3 +1,7 @@
+# GitOpen
+
+This repository is **[jimmy1340/gitopen](https://github.com/jimmy1340/gitopen)**, a fork of [bolt.diy](https://github.com/stackblitz-labs/bolt.diy). The setup guide below is the upstream bolt.diy flow (pnpm, Docker, and Electron) and applies here unchanged. Where the text says bolt.diy, use this repo as the source checkout. Fork-only changes are recorded in this repository's pull requests. `changelog.md` starts with a short GitOpen note; the release list under it is the inherited upstream history.
+
 # bolt.diy
 
 [![bolt.diy: AI-Powered Full-Stack Web Development in the Browser](./public/social_preview_index.jpg)](https://bolt.diy)

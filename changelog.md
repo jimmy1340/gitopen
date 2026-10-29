@@ -1,3 +1,9 @@
+# GitOpen fork
+
+Notes below this section were inherited from [bolt.diy](https://github.com/stackblitz-labs/bolt.diy) and are not a complete log of **jimmy1340/gitopen**. Changes that exist only in this fork are tracked in this repository's pull requests.
+
+---
+
 # 🚀 Release v1.0.0
 
 ## What's Changed 🌟
