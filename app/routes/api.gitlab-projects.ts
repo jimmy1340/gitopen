@@ -1,5 +1,5 @@
 import { json } from '@remix-run/cloudflare';
-import { withSecurity } from '~/lib/security';
+import { DisallowedUrlError, fetchPublicHttps, withSecurity } from '~/lib/security';
 import type { GitLabProjectInfo } from '~/types/GitLab';
 
 interface GitLabProject {
@@ -25,10 +25,13 @@ async function gitlabProjectsLoader({ request }: { request: Request }) {
       return json({ error: 'GitLab token is required' }, { status: 400 });
     }
 
-    // Fetch user's projects from GitLab API
+    /*
+     * The host is caller-controlled. Keep it on public https; otherwise this route
+     * is an unauthenticated SSRF against cloud metadata and private networks.
+     */
     const url = `${gitlabUrl}/api/v4/projects?membership=true&per_page=100&order_by=updated_at&sort=desc`;
 
-    const response = await fetch(url, {
+    const response = await fetchPublicHttps(url, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: 'application/json',
@@ -73,6 +76,10 @@ async function gitlabProjectsLoader({ request }: { request: Request }) {
       total: transformedProjects.length,
     });
   } catch (error) {
+    if (error instanceof DisallowedUrlError) {
+      return json({ error: 'GitLab URL is not allowed' }, { status: 403 });
+    }
+
     console.error('Failed to fetch GitLab projects:', error);
 
     if (error instanceof Error) {

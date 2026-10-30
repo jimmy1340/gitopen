@@ -94,6 +94,15 @@ async function githubUserAction({ request, context }: { request: Request; contex
       perPage = parseInt(formData.get('per_page') as string) || 30;
     }
 
+    /*
+     * Unauthenticated callers must not receive a GitHub token. The value resolved
+     * below can be a server environment credential, and nothing in the app calls
+     * this action (git uses the caller's own cookie in the browser).
+     */
+    if (action === 'get_token') {
+      return json({ error: 'GitHub tokens are not exported by this route' }, { status: 403 });
+    }
+
     // Get API keys from cookies (server-side only)
     const cookieHeader = request.headers.get('Cookie');
     const apiKeys = getApiKeysFromCookie(cookieHeader);
@@ -192,13 +201,6 @@ async function githubUserAction({ request, context }: { request: Request; contex
           },
           protected: branch.protected,
         })),
-      });
-    }
-
-    if (action === 'get_token') {
-      // Return the GitHub token for git authentication
-      return json({
-        token: githubToken,
       });
     }
 
