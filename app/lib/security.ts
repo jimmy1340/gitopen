@@ -3,7 +3,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from '@remix-run/cloudfla
 // Rate limiting store (in-memory for serverless environments)
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
 
-// Rate limit configuration
+// Rate limit configuration. More specific patterns must win over `/api/*`.
 const RATE_LIMITS = {
   // General API endpoints
   '/api/*': { windowMs: 15 * 60 * 1000, maxRequests: 100 }, // 100 requests per 15 minutes
@@ -18,50 +18,110 @@ const RATE_LIMITS = {
   '/api/netlify-*': { windowMs: 60 * 1000, maxRequests: 20 }, // 20 requests per minute
 };
 
-/**
- * Rate limiting middleware
- */
-export function checkRateLimit(request: Request, endpoint: string): { allowed: boolean; resetTime?: number } {
-  const clientIP = getClientIP(request);
-  const key = `${clientIP}:${endpoint}`;
+export const MAX_RATE_LIMIT_KEYS = 4096;
 
-  // Find matching rate limit rule
-  const rule = Object.entries(RATE_LIMITS).find(([pattern]) => {
-    if (pattern.endsWith('/*')) {
-      const basePattern = pattern.slice(0, -2);
-      return endpoint.startsWith(basePattern);
+type RateLimitConfig = { windowMs: number; maxRequests: number };
+
+/**
+ * The first matching pattern used to win, and `/api/*` is declared first, so the
+ * llmcall / github / netlify limits never ran. Longer (and exact) patterns win.
+ */
+export function resolveRateLimit(endpoint: string): RateLimitConfig | undefined {
+  let best: { specificity: number; config: RateLimitConfig } | undefined;
+
+  for (const [pattern, config] of Object.entries(RATE_LIMITS)) {
+    if (!rateLimitPatternMatches(pattern, endpoint)) {
+      continue;
     }
 
-    return endpoint === pattern;
-  });
+    const specificity = pattern.endsWith('*') ? pattern.length - 1 : pattern.length + 1000;
 
-  if (!rule) {
-    return { allowed: true }; // No rate limit for this endpoint
+    if (!best || specificity > best.specificity) {
+      best = { specificity, config };
+    }
   }
 
-  const [, config] = rule;
-  const now = Date.now();
-  const windowStart = now - config.windowMs;
+  return best?.config;
+}
 
-  // Clean up old entries
-  for (const [storedKey, data] of rateLimitStore.entries()) {
-    if (data.resetTime < windowStart) {
+function rateLimitPatternMatches(pattern: string, endpoint: string): boolean {
+  if (pattern.endsWith('*')) {
+    return endpoint.startsWith(pattern.slice(0, -1));
+  }
+
+  return endpoint === pattern;
+}
+
+/**
+ * Rate limiting middleware.
+ * `now` is injectable so tests can move the window without mocking the clock.
+ */
+export function checkRateLimit(
+  request: Request,
+  endpoint: string,
+  now = Date.now(),
+): { allowed: boolean; resetTime?: number } {
+  const config = resolveRateLimit(endpoint);
+
+  if (!config) {
+    return { allowed: true };
+  }
+
+  const key = `${getClientIP(request)}:${endpoint}`;
+
+  pruneRateLimitStore(now);
+
+  let entry = rateLimitStore.get(key);
+
+  if (!entry || now >= entry.resetTime) {
+    entry = { count: 0, resetTime: now + config.windowMs };
+  }
+
+  if (entry.count >= config.maxRequests) {
+    return { allowed: false, resetTime: entry.resetTime };
+  }
+
+  entry.count += 1;
+  rateLimitStore.set(key, entry);
+
+  if (rateLimitStore.size > MAX_RATE_LIMIT_KEYS) {
+    pruneRateLimitStore(now);
+  }
+
+  return { allowed: true };
+}
+
+export function resetRateLimitState(): void {
+  rateLimitStore.clear();
+}
+
+export function getRateLimitStoreSize(): number {
+  return rateLimitStore.size;
+}
+
+function pruneRateLimitStore(now: number): void {
+  if (rateLimitStore.size <= 256) {
+    return;
+  }
+
+  for (const [storedKey, data] of rateLimitStore) {
+    if (data.resetTime <= now) {
       rateLimitStore.delete(storedKey);
     }
   }
 
-  // Get or create rate limit data
-  const rateLimitData = rateLimitStore.get(key) || { count: 0, resetTime: now + config.windowMs };
-
-  if (rateLimitData.count >= config.maxRequests) {
-    return { allowed: false, resetTime: rateLimitData.resetTime };
+  if (rateLimitStore.size <= MAX_RATE_LIMIT_KEYS) {
+    return;
   }
 
-  // Update rate limit data
-  rateLimitData.count++;
-  rateLimitStore.set(key, rateLimitData);
+  const overflow = rateLimitStore.size - MAX_RATE_LIMIT_KEYS;
+  const oldest = [...rateLimitStore.entries()]
+    .sort((left, right) => left[1].resetTime - right[1].resetTime)
+    .slice(0, overflow);
 
-  return { allowed: true };
+  for (const [storedKey] of oldest) {
+    rateLimitStore.delete(storedKey);
+  }
 }
 
 /**
@@ -167,6 +227,90 @@ export function isPrivateOrLocalHost(hostname: string): boolean {
 
   // Any remaining all-numeric / hex host is an obfuscated IPv4 literal
   return /^(0x[0-9a-f]+|\d+)$/.test(host);
+}
+
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const MAX_PUBLIC_REDIRECTS = 5;
+
+export class DisallowedUrlError extends Error {
+  constructor(message = 'Target host is not allowed') {
+    super(message);
+    this.name = 'DisallowedUrlError';
+  }
+}
+
+function parsePublicHttpsUrl(input: string): URL {
+  if (typeof input !== 'string' || input.length === 0 || input.length > 2048) {
+    throw new DisallowedUrlError();
+  }
+
+  let target: URL;
+
+  try {
+    target = new URL(input);
+  } catch {
+    throw new DisallowedUrlError();
+  }
+
+  if (target.protocol !== 'https:' || target.username || target.password || isPrivateOrLocalHost(target.hostname)) {
+    throw new DisallowedUrlError();
+  }
+
+  return target;
+}
+
+/**
+ * Fetch an https URL that is not loopback, private, or link-local.
+ * Redirects are checked the same way. `redirect: 'follow'` would skip that check,
+ * and credentials are dropped when the origin changes.
+ */
+export async function fetchPublicHttps(input: string, init: RequestInit = {}): Promise<Response> {
+  let current = parsePublicHttpsUrl(input);
+  const headers = new Headers(init.headers);
+  const method = init.method ?? 'GET';
+
+  for (let redirects = 0; ; redirects++) {
+    const response = await fetch(current.toString(), {
+      method,
+      headers,
+      body: init.body,
+      redirect: 'manual',
+    });
+
+    if (!REDIRECT_STATUSES.has(response.status)) {
+      return response;
+    }
+
+    await response.body?.cancel().catch(() => undefined);
+
+    if (redirects >= MAX_PUBLIC_REDIRECTS) {
+      throw new DisallowedUrlError('Too many redirects');
+    }
+
+    const location = response.headers.get('location');
+
+    if (!location) {
+      throw new DisallowedUrlError('Invalid redirect URL');
+    }
+
+    let next: URL;
+
+    try {
+      next = parsePublicHttpsUrl(new URL(location, current).toString());
+    } catch (error) {
+      if (error instanceof DisallowedUrlError) {
+        throw error;
+      }
+
+      throw new DisallowedUrlError('Invalid redirect URL');
+    }
+
+    if (next.origin !== current.origin) {
+      headers.delete('authorization');
+    }
+
+    current = next;
+  }
 }
 
 /**

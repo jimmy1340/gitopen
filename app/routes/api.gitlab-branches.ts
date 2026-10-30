@@ -1,5 +1,5 @@
 import { json } from '@remix-run/cloudflare';
-import { withSecurity } from '~/lib/security';
+import { DisallowedUrlError, fetchPublicHttps, withSecurity } from '~/lib/security';
 
 interface GitLabBranch {
   name: string;
@@ -33,15 +33,24 @@ async function gitlabBranchesLoader({ request }: { request: Request }) {
       return json({ error: 'Project ID is required' }, { status: 400 });
     }
 
-    // Fetch branches from GitLab API
-    const branchesUrl = `${gitlabUrl}/api/v4/projects/${projectId}/repository/branches?per_page=100`;
+    // The UI sends the numeric project id. Anything else is interpolated into the URL path.
+    const projectIdText = String(projectId).trim();
 
-    const response = await fetch(branchesUrl, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json',
-        'User-Agent': 'bolt.diy-app',
-      },
+    if (!/^\d{1,20}$/.test(projectIdText)) {
+      return json({ error: 'Project ID is not allowed' }, { status: 400 });
+    }
+
+    const gitlabHeaders = {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+      'User-Agent': 'bolt.diy-app',
+    };
+
+    // Fetch branches from GitLab API
+    const branchesUrl = `${gitlabUrl}/api/v4/projects/${projectIdText}/repository/branches?per_page=100`;
+
+    const response = await fetchPublicHttps(branchesUrl, {
+      headers: gitlabHeaders,
     });
 
     if (!response.ok) {
@@ -67,13 +76,9 @@ async function gitlabBranchesLoader({ request }: { request: Request }) {
     const branches: GitLabBranch[] = await response.json();
 
     // Also fetch project info to get default branch name
-    const projectUrl = `${gitlabUrl}/api/v4/projects/${projectId}`;
-    const projectResponse = await fetch(projectUrl, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json',
-        'User-Agent': 'bolt.diy-app',
-      },
+    const projectUrl = `${gitlabUrl}/api/v4/projects/${projectIdText}`;
+    const projectResponse = await fetchPublicHttps(projectUrl, {
+      headers: gitlabHeaders,
     });
 
     let defaultBranchName = 'main'; // fallback
@@ -111,6 +116,10 @@ async function gitlabBranchesLoader({ request }: { request: Request }) {
       total: transformedBranches.length,
     });
   } catch (error) {
+    if (error instanceof DisallowedUrlError) {
+      return json({ error: 'GitLab URL is not allowed' }, { status: 403 });
+    }
+
     console.error('Failed to fetch GitLab branches:', error);
 
     if (error instanceof Error) {
