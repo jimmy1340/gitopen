@@ -96,4 +96,51 @@ describe('POST /api/github-user', () => {
 
     expect(headers.Authorization).toBe('Bearer server-secret-token');
   });
+
+  it.each(['owner/repo', 'xKevIsDev/bolt-expo-template', 'acme/repo.js'])('lists branches for %s', async (repo) => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            name: 'main',
+            commit: { sha: 'abc123', url: `https://api.github.com/repos/${repo}/commits/abc123` },
+            protected: false,
+          },
+        ]),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const response = await post({ action: 'get_branches', repo });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      branches: [
+        {
+          name: 'main',
+          commit: { sha: 'abc123', url: `https://api.github.com/repos/${repo}/commits/abc123` },
+          protected: false,
+        },
+      ],
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+
+    expect(url).toBe(`https://api.github.com/repos/${repo}/branches`);
+    expect(headers.Authorization).toBe('Bearer server-secret-token');
+  });
+
+  it.each(['../x', 'foo/bar?x', 'foo/bar#x', 'foo bar/baz', 'owner/..', './x', 'foo/bar/baz'])(
+    'rejects get_branches repo %s without calling GitHub',
+    async (repo) => {
+      const response = await post({ action: 'get_branches', repo });
+      const text = await response.text();
+
+      expect(response.status).toBe(400);
+      expect(text).toContain('not allowed');
+      expect(text).not.toContain('server-secret-token');
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 });

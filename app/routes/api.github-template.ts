@@ -1,5 +1,6 @@
 import { json } from '@remix-run/cloudflare';
 import JSZip from 'jszip';
+import { isGitHubRepoCoordinate } from '~/lib/api/github-coordinates';
 
 // Function to detect if we're running in Cloudflare
 function isCloudflareEnvironment(context: any): boolean {
@@ -207,6 +208,10 @@ export async function loader({ request, context }: { request: Request; context: 
 
   if (!repo) {
     return json({ error: 'Repository name is required' }, { status: 400 });
+  }
+
+  if (!isGitHubRepoCoordinate(repo)) {
+    return json({ error: 'Repository name is not allowed' }, { status: 400 });
   }
 
   try {

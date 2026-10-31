@@ -1,6 +1,6 @@
 # GitOpen 优化计划（2026-10-30 → 2026-11-05）
 
-审查基线是 `main` @ `f0d2f75`（含已合并的 [#1](https://github.com/jimmy1340/gitopen/pull/1)、[#2](https://github.com/jimmy1340/gitopen/pull/2)、[#3](https://github.com/jimmy1340/gitopen/pull/3)）。Day 1 的实现是 [#4](https://github.com/jimmy1340/gitopen/pull/4)（分支 `cursor/day1-request-safety-18b7`）。
+审查基线是 `main` @ `f0d2f75`（含已合并的 [#1](https://github.com/jimmy1340/gitopen/pull/1)、[#2](https://github.com/jimmy1340/gitopen/pull/2)、[#3](https://github.com/jimmy1340/gitopen/pull/3)）。Day 1 的实现是 [#4](https://github.com/jimmy1340/gitopen/pull/4)（分支 `cursor/day1-request-safety-18b7`），已合并。Day 2 的实现是 [#5](https://github.com/jimmy1340/gitopen/pull/5)（分支 `cursor/day2-github-repo-coordinates-85ec`）。
 
 - **#1** 限制了 API key 导出、MCP stdio，并给 git proxy 加了私网与重定向校验。`POST /api/github-user` 的 `get_token` 仍会把解析到的 token（含服务器环境变量）返回给未认证调用方；GitLab 路由仍把调用方提供的 `gitlabUrl` 交给 `fetch` 且默认跟随重定向。
 - **#2** 是界面与侧边栏修复。本次审查没有发现需要在本周第一天改动的界面回归，后续几天也不做大块 UI 重构。
@@ -8,7 +8,9 @@
 
 原则：每天只做一小块可审的改动，保持现有成功路径的响应形态；安全边界收紧（拒绝私网 GitLab、不再导出 token）单独写明。不在本周做 DNS 解析来挡 `nip.io` 这类重绑定，也不给 `/api/chat` 加新的限流。
 
-## Day 1 — 2026-10-30（本次 PR）
+## Day 1 — 2026-10-30（Done）
+
+**状态：Done。** 已合并 [#4](https://github.com/jimmy1340/gitopen/pull/4)。
 
 请求路径上的三处安全/正确性修复。成功的 GitHub 仓库列表、公开 HTTPS GitLab 项目列表，以及合法 cookie 的解析结果保持不变。
 
@@ -52,14 +54,22 @@
 - `app/routes/api.gitlab-projects.ts`、`app/routes/api.gitlab-branches.ts`、`app/lib/api/gitlab-routes.spec.ts`
 - `app/routes/api.github-user.ts`、`app/lib/api/github-user.spec.ts`
 
-## Day 2 — 2026-10-31
+## Day 2 — 2026-10-31（Done）
 
-校验拼进 GitHub API URL 的仓库坐标，避免路径注入。不改 GitLab（Day 1 已限制 project id 与主机）。
+**状态：Done。** 实现见 [#5](https://github.com/jimmy1340/gitopen/pull/5)。
+
+校验拼进 GitHub API URL 的仓库坐标，避免路径注入。不改 GitLab（Day 1 已限制 project id 与主机）。`owner` 与 `name` 只允许 `[A-Za-z0-9_.-]`，拒绝空格、`?`、`#`、`..`，以及会被 URL 解析器丢掉的 `.` 段。非法值返回 400，且不会带 token 出站。
 
 - `app/routes/api.github-user.ts` 的 `get_branches`：`repo` 必须是 `owner/name`，字符集 `[A-Za-z0-9_.-]`，拒绝空格、`?`、`#`、`..`。
 - `app/routes/api.github-branches.ts`：`owner` 与 `repo` 用同一规则后再请求 `/repos/{owner}/{repo}`。
 - `app/routes/api.github-template.ts`：`repo` 查询参数同样校验；非法值 400，不带 token 出站。
 - 验收：`owner/repo` 仍 200（mock）；`../x`、`foo/bar?x` 为 400 且 `fetch` 未被调用。现有合法卡片的克隆与分支列表行为不变。
+
+### 涉及文件
+
+- `app/lib/api/github-coordinates.ts`、`app/lib/api/github-repo-routes.spec.ts`
+- `app/routes/api.github-user.ts`、`app/routes/api.github-branches.ts`、`app/routes/api.github-template.ts`
+- `app/lib/api/github-user.spec.ts`
 
 ## Day 3 — 2026-11-01
 
