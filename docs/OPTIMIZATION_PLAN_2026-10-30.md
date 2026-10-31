@@ -1,6 +1,6 @@
 # GitOpen 优化计划（2026-10-30 → 2026-11-05）
 
-审查基线是 `main` @ `f0d2f75`（含已合并的 [#1](https://github.com/jimmy1340/gitopen/pull/1)、[#2](https://github.com/jimmy1340/gitopen/pull/2)、[#3](https://github.com/jimmy1340/gitopen/pull/3)）。Day 1 的实现是 [#4](https://github.com/jimmy1340/gitopen/pull/4)（分支 `cursor/day1-request-safety-18b7`），已合并。
+审查基线是 `main` @ `f0d2f75`（含已合并的 [#1](https://github.com/jimmy1340/gitopen/pull/1)、[#2](https://github.com/jimmy1340/gitopen/pull/2)、[#3](https://github.com/jimmy1340/gitopen/pull/3)）。Day 1 的实现是 [#4](https://github.com/jimmy1340/gitopen/pull/4)（分支 `cursor/day1-request-safety-18b7`），已合并。Day 2 的实现是 [#5](https://github.com/jimmy1340/gitopen/pull/5)（分支 `cursor/day2-github-repo-coordinates-85ec`）。
 
 - **#1** 限制了 API key 导出、MCP stdio，并给 git proxy 加了私网与重定向校验。`POST /api/github-user` 的 `get_token` 仍会把解析到的 token（含服务器环境变量）返回给未认证调用方；GitLab 路由仍把调用方提供的 `gitlabUrl` 交给 `fetch` 且默认跟随重定向。
 - **#2** 是界面与侧边栏修复。本次审查没有发现需要在本周第一天改动的界面回归，后续几天也不做大块 UI 重构。
@@ -56,7 +56,7 @@
 
 ## Day 2 — 2026-10-31（Done）
 
-**状态：Done。**
+**状态：Done。** 实现见 [#5](https://github.com/jimmy1340/gitopen/pull/5)。
 
 校验拼进 GitHub API URL 的仓库坐标，避免路径注入。不改 GitLab（Day 1 已限制 project id 与主机）。`owner` 与 `name` 只允许 `[A-Za-z0-9_.-]`，拒绝空格、`?`、`#`、`..`，以及会被 URL 解析器丢掉的 `.` 段。非法值返回 400，且不会带 token 出站。
 
