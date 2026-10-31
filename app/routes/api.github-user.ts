@@ -1,5 +1,6 @@
 import { json } from '@remix-run/cloudflare';
 import { getApiKeysFromCookie } from '~/lib/api/cookies';
+import { isGitHubRepoCoordinate } from '~/lib/api/github-coordinates';
 import { withSecurity } from '~/lib/security';
 
 async function githubUserLoader({ request, context }: { request: Request; context: any }) {
@@ -168,6 +169,10 @@ async function githubUserAction({ request, context }: { request: Request; contex
     if (action === 'get_branches') {
       if (!repoFullName) {
         return json({ error: 'Repository name is required' }, { status: 400 });
+      }
+
+      if (!isGitHubRepoCoordinate(repoFullName)) {
+        return json({ error: 'Repository name is not allowed' }, { status: 400 });
       }
 
       // Fetch repository branches

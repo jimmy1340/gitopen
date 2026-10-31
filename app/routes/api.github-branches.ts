@@ -1,5 +1,6 @@
 import { json } from '@remix-run/cloudflare';
 import { getApiKeysFromCookie } from '~/lib/api/cookies';
+import { isGitHubRepoSegment } from '~/lib/api/github-coordinates';
 import { withSecurity } from '~/lib/security';
 
 interface GitHubBranch {
@@ -65,6 +66,10 @@ async function githubBranchesLoader({ request, context }: { request: Request; co
 
     if (!githubToken) {
       return json({ error: 'GitHub token not found' }, { status: 401 });
+    }
+
+    if (!isGitHubRepoSegment(owner) || !isGitHubRepoSegment(repo)) {
+      return json({ error: 'Owner or repo is not allowed' }, { status: 400 });
     }
 
     // First, get repository info to know the default branch
