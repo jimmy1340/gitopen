@@ -3,6 +3,38 @@ import { getApiKeysFromCookie } from '~/lib/api/cookies';
 import { withSecurity } from '~/lib/security';
 import type { GitHubUserResponse, GitHubStats } from '~/types/GitHub';
 
+const MAX_REPO_PAGES = 10;
+const REPOS_PER_PAGE = 100;
+const BRANCH_LOOKUP_LIMIT = 50;
+const BRANCH_LOOKUP_CONCURRENCY = 5;
+
+async function mapSettledWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>,
+): Promise<Array<PromiseSettledResult<R>>> {
+  const results = new Array<PromiseSettledResult<R>>(items.length);
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+
+      try {
+        results[index] = { status: 'fulfilled', value: await mapper(items[index]) };
+      } catch (reason) {
+        results[index] = { status: 'rejected', reason };
+      }
+    }
+  }
+
+  const workerCount = Math.min(Math.max(concurrency, 1), items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+  return results;
+}
+
 async function githubStatsLoader({ request, context }: { request: Request; context: any }) {
   try {
     // Get API keys from cookies (server-side only)
@@ -41,14 +73,13 @@ async function githubStatsLoader({ request, context }: { request: Request; conte
 
     const user = (await userResponse.json()) as GitHubUserResponse;
 
-    // Fetch repositories with pagination
+    // At most 10 repo pages (1000 items). A page shorter than 100 items still ends the loop.
     let allRepos: any[] = [];
     let page = 1;
-    let hasMore = true;
 
-    while (hasMore) {
+    while (page <= MAX_REPO_PAGES) {
       const repoResponse = await fetch(
-        `https://api.github.com/user/repos?sort=updated&per_page=100&page=${page}&affiliation=owner,organization_member`,
+        `https://api.github.com/user/repos?sort=updated&per_page=${REPOS_PER_PAGE}&page=${page}&affiliation=owner,organization_member`,
         {
           headers: {
             Accept: 'application/vnd.github.v3+json',
@@ -65,16 +96,18 @@ async function githubStatsLoader({ request, context }: { request: Request; conte
       const repos: any[] = await repoResponse.json();
       allRepos = allRepos.concat(repos);
 
-      if (repos.length < 100) {
-        hasMore = false;
-      } else {
-        page += 1;
+      if (repos.length < REPOS_PER_PAGE) {
+        break;
       }
+
+      page += 1;
     }
 
-    // Fetch branch counts for repositories (limit to first 50 repos to avoid rate limits)
-    const reposWithBranches = await Promise.allSettled(
-      allRepos.slice(0, 50).map(async (repo) => {
+    // Fetch branch counts for the first 50 repos, with at most 5 requests in flight.
+    const reposWithBranches = await mapSettledWithConcurrency(
+      allRepos.slice(0, BRANCH_LOOKUP_LIMIT),
+      BRANCH_LOOKUP_CONCURRENCY,
+      async (repo) => {
         try {
           const branchesResponse = await fetch(`https://api.github.com/repos/${repo.full_name}/branches?per_page=1`, {
             headers: {
@@ -107,7 +140,7 @@ async function githubStatsLoader({ request, context }: { request: Request; conte
           console.warn(`Failed to fetch branches for ${repo.full_name}:`, error);
           return repo;
         }
-      }),
+      },
     );
 
     // Update repositories with branch information where available
