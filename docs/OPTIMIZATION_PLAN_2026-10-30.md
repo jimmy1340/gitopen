@@ -1,6 +1,6 @@
 # GitOpen 优化计划（2026-10-30 → 2026-11-05）
 
-审查基线是 `main` @ `f0d2f75`（含已合并的 [#1](https://github.com/jimmy1340/gitopen/pull/1)、[#2](https://github.com/jimmy1340/gitopen/pull/2)、[#3](https://github.com/jimmy1340/gitopen/pull/3)）。Day 1 的实现是 [#4](https://github.com/jimmy1340/gitopen/pull/4)（分支 `cursor/day1-request-safety-18b7`），已合并。Day 2 的实现是 [#5](https://github.com/jimmy1340/gitopen/pull/5)（分支 `cursor/day2-github-repo-coordinates-85ec`）。
+审查基线是 `main` @ `f0d2f75`（含已合并的 [#1](https://github.com/jimmy1340/gitopen/pull/1)、[#2](https://github.com/jimmy1340/gitopen/pull/2)、[#3](https://github.com/jimmy1340/gitopen/pull/3)）。Day 1 的实现是 [#4](https://github.com/jimmy1340/gitopen/pull/4)（分支 `cursor/day1-request-safety-18b7`），已合并。Day 2 的实现是 [#5](https://github.com/jimmy1340/gitopen/pull/5)（分支 `cursor/day2-github-repo-coordinates-85ec`）。Day 3 的实现是 [#6](https://github.com/jimmy1340/gitopen/pull/6)（分支 `cursor/day3-github-stats-pagination-699b`）。
 
 - **#1** 限制了 API key 导出、MCP stdio，并给 git proxy 加了私网与重定向校验。`POST /api/github-user` 的 `get_token` 仍会把解析到的 token（含服务器环境变量）返回给未认证调用方；GitLab 路由仍把调用方提供的 `gitlabUrl` 交给 `fetch` 且默认跟随重定向。
 - **#2** 是界面与侧边栏修复。本次审查没有发现需要在本周第一天改动的界面回归，后续几天也不做大块 UI 重构。
@@ -71,13 +71,19 @@
 - `app/routes/api.github-user.ts`、`app/routes/api.github-branches.ts`、`app/routes/api.github-template.ts`
 - `app/lib/api/github-user.spec.ts`
 
-## Day 3 — 2026-11-01
+## Day 3 — 2026-11-01（Done）
+
+**状态：Done。** 实现见 [#6](https://github.com/jimmy1340/gitopen/pull/6)。
 
 给 GitHub 统计加页数上限，避免 `while (hasMore)` 在大账号上无限翻页，并降低分支请求的并发。
 
 - `app/routes/api.github-stats.ts`：仓库列表最多 10 页（1000 条）。不足 100 条时仍提前结束。响应字段保持 `GitHubStats`。
-- 分支计数维持“只看前 50 个仓库”，但改为有限并发（例如 5），而不是 `Promise.allSettled` 一次打满。
+- 分支计数维持“只看前 50 个仓库”，但改为有限并发（5），而不是 `Promise.allSettled` 一次打满。
 - 验收：mock 持续返回 100 条时 `fetch` 次数有上界；小账号（1 页）的 JSON 形状与现在一致。
+
+### 涉及文件
+
+- `app/routes/api.github-stats.ts`、`app/lib/api/github-stats.spec.ts`
 
 ## Day 4 — 2026-11-02
 
