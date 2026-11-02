@@ -85,14 +85,22 @@
 
 - `app/routes/api.github-stats.ts`、`app/lib/api/github-stats.spec.ts`
 
-## Day 4 — 2026-11-02
+## Day 4 — 2026-11-02（Done）
+
+**状态：Done。** 实现见分支 `cursor/day4-diagnostics-ratelimit-0335`。
 
 减少未认证诊断接口的出站，并收紧限流用的客户端 IP。
 
-- `app/routes/api.system.diagnostics.ts`：对 `https://api.github.com/zen` 与 `https://api.netlify.com/api/v1/` 的探测加短 TTL 缓存（建议 60 秒），同一进程内重复调用不再每次都打外网。响应仍包含 `externalApis.github` / `netlify` 的可达性字段，不返回任何 token。
-- `app/lib/security.ts` 的 `getClientIP`：优先 `cf-connecting-ip`。仅当部署显式设置受信代理时才采用 `x-forwarded-for` / `x-real-ip`，否则同一进程内未带 CF 头的请求共用一个桶，避免调用方自造 IP 撑满 4096 个 key。
-- 在统计 `selectStarterTemplate` 的调用次数之后，让 `/api/llmcall` 使用已经写好的 10 次/分钟规则。不要把同一限制套到 `/api/chat`。
-- 验收：诊断接口第二次命中缓存时 `fetch` 不再增加；伪造 `x-forwarded-for` 不能换新桶（在未开受信代理时）；llmcall 超限返回 429，阈值内响应不变。
+- `app/routes/api.system.diagnostics.ts`：对 `https://api.github.com/zen` 与 `https://api.netlify.com/api/v1/` 的探测加 60 秒进程内 TTL 缓存。同一进程内重复调用在 TTL 内不再打外网（进行中的探测也会合并）。响应仍包含 `externalApis.github` / `netlify` 的可达性字段，不返回任何 token。
+- `app/lib/security.ts` 的 `getClientIP`：优先 `cf-connecting-ip`。仅当进程环境变量 `TRUSTED_PROXY` 为 `1`、`true` 或 `yes` 时才采用 `x-forwarded-for` / `x-real-ip`（`x-real-ip` 优先于转发链的第一跳）。否则同一进程内未带 CF 头的请求共用一个桶，避免调用方自造 IP 撑满 4096 个 key。
+- `/api/llmcall` 通过 `withSecurity` 使用已经写好的 10 次/分钟规则。阈值内成功响应体与原先一致；超限返回 429。`/api/chat` 不套用该限制。
+- 验收：诊断接口第二次命中缓存时 `fetch` 不再增加；伪造 `x-forwarded-for` 不能换新桶（未开受信代理时）；llmcall 超限返回 429，阈值内响应体不变。
+
+### 涉及文件
+
+- `app/routes/api.system.diagnostics.ts`、`app/lib/api/diagnostics.spec.ts`
+- `app/lib/security.ts`、`app/lib/security.spec.ts`
+- `app/routes/api.llmcall.ts`、`app/lib/api/llmcall.spec.ts`
 
 ## Day 5 — 2026-11-03
 

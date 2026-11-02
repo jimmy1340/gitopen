@@ -7,11 +7,8 @@ import { MAX_TOKENS, PROVIDER_COMPLETION_LIMITS, isReasoningModel } from '~/lib/
 import { LLMManager } from '~/lib/modules/llm/manager';
 import type { ModelInfo } from '~/lib/modules/llm/types';
 import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/cookies';
+import { withSecurity } from '~/lib/security';
 import { createScopedLogger } from '~/utils/logger';
-
-export async function action(args: ActionFunctionArgs) {
-  return llmCallAction(args);
-}
 
 async function getModelList(options: {
   apiKeys?: Record<string, string>;
@@ -274,3 +271,21 @@ async function llmCallAction({ context, request }: ActionFunctionArgs) {
     }
   }
 }
+
+/*
+ * llmCallAction throws Response for 400/401/500. withSecurity would turn those into a
+ * generic 500, so pass them through. The 10/minute rule applies only here, not to /api/chat.
+ */
+async function rateLimitedLlmCallAction(args: ActionFunctionArgs): Promise<Response> {
+  try {
+    return await llmCallAction(args);
+  } catch (error) {
+    if (error instanceof Response) {
+      return error;
+    }
+
+    throw error;
+  }
+}
+
+export const action = withSecurity(rateLimitedLlmCallAction);
