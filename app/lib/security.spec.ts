@@ -4,6 +4,7 @@ import {
   MAX_RATE_LIMIT_KEYS,
   checkRateLimit,
   fetchPublicHttps,
+  getClientIP,
   getRateLimitStoreSize,
   isPrivateOrLocalHost,
   resetRateLimitState,
@@ -160,6 +161,98 @@ describe('checkRateLimit', () => {
 
     expect(calls).toBe(30);
     expect(lastStatus).toBe(429);
+  });
+});
+
+describe('getClientIP', () => {
+  const endpoint = '/api/llmcall';
+  let previousTrustedProxy: string | undefined;
+
+  beforeEach(() => {
+    previousTrustedProxy = process.env.TRUSTED_PROXY;
+    delete process.env.TRUSTED_PROXY;
+    resetRateLimitState();
+  });
+
+  afterEach(() => {
+    if (previousTrustedProxy === undefined) {
+      delete process.env.TRUSTED_PROXY;
+    } else {
+      process.env.TRUSTED_PROXY = previousTrustedProxy;
+    }
+
+    resetRateLimitState();
+  });
+
+  const hit = (headers: Record<string, string>) =>
+    checkRateLimit(new Request(`http://example.test${endpoint}`, { headers }), endpoint);
+
+  it('prefers cf-connecting-ip over forwarding headers', () => {
+    const request = new Request('http://example.test/api/llmcall', {
+      headers: {
+        'cf-connecting-ip': '203.0.113.10',
+        'x-real-ip': '198.51.100.2',
+        'x-forwarded-for': '198.51.100.1',
+      },
+    });
+
+    expect(getClientIP(request)).toBe('203.0.113.10');
+  });
+
+  it('does not create a new bucket for a forged x-forwarded-for when trusted proxy is off', () => {
+    for (let i = 0; i < 10; i++) {
+      expect(hit({ 'x-forwarded-for': `203.0.113.${i}` }).allowed).toBe(true);
+    }
+
+    expect(getRateLimitStoreSize()).toBe(1);
+    expect(hit({ 'x-forwarded-for': '198.51.100.50', 'x-real-ip': '198.51.100.51' }).allowed).toBe(false);
+    expect(
+      getClientIP(new Request('http://example.test/api/llmcall', { headers: { 'x-real-ip': '203.0.113.9' } })),
+    ).toBe('unknown');
+  });
+
+  it('still separates clients that present cf-connecting-ip when trusted proxy is off', () => {
+    expect(hit({ 'cf-connecting-ip': '203.0.113.10', 'x-forwarded-for': '1.1.1.1' }).allowed).toBe(true);
+    expect(hit({ 'cf-connecting-ip': '203.0.113.11', 'x-forwarded-for': '1.1.1.1' }).allowed).toBe(true);
+    expect(getRateLimitStoreSize()).toBe(2);
+  });
+
+  it.each(['1', 'true', 'yes', 'TRUE'])('honors forwarding headers when TRUSTED_PROXY=%s', (flag) => {
+    process.env.TRUSTED_PROXY = flag;
+    resetRateLimitState();
+
+    expect(hit({ 'x-forwarded-for': '203.0.113.1, 10.0.0.1' }).allowed).toBe(true);
+    expect(hit({ 'x-forwarded-for': '203.0.113.2' }).allowed).toBe(true);
+    expect(getRateLimitStoreSize()).toBe(2);
+
+    resetRateLimitState();
+
+    expect(hit({ 'x-real-ip': '203.0.113.8', 'x-forwarded-for': '203.0.113.9' }).allowed).toBe(true);
+    expect(hit({ 'x-real-ip': '203.0.113.8', 'x-forwarded-for': '198.51.100.9' }).allowed).toBe(true);
+    expect(getRateLimitStoreSize()).toBe(1);
+    expect(
+      getClientIP(
+        new Request('http://example.test/api/llmcall', {
+          headers: { 'x-forwarded-for': '203.0.113.1, 10.0.0.8' },
+        }),
+      ),
+    ).toBe('203.0.113.1');
+
+    resetRateLimitState();
+
+    hit({ 'cf-connecting-ip': '203.0.113.10', 'x-real-ip': '198.51.100.10' });
+    hit({ 'cf-connecting-ip': '203.0.113.10', 'x-forwarded-for': '198.51.100.11' });
+    hit({ 'cf-connecting-ip': '203.0.113.11', 'x-real-ip': '198.51.100.10' });
+    expect(getRateLimitStoreSize()).toBe(2);
+  });
+
+  it('does not treat TRUSTED_PROXY=false as enabling forwarding headers', () => {
+    process.env.TRUSTED_PROXY = 'false';
+
+    hit({ 'x-forwarded-for': '203.0.113.1' });
+    hit({ 'x-real-ip': '203.0.113.2' });
+
+    expect(getRateLimitStoreSize()).toBe(1);
   });
 });
 

@@ -11,6 +11,73 @@ interface AppContext {
   };
 }
 
+export const EXTERNAL_API_PROBE_TTL_MS = 60_000;
+
+const GITHUB_ZEN_URL = 'https://api.github.com/zen';
+const NETLIFY_API_URL = 'https://api.netlify.com/api/v1/';
+
+type ExternalApiProbe =
+  | { isReachable: boolean; status: number; statusText: string }
+  | { isReachable: false; error: string };
+
+const externalApiProbeCache = new Map<string, { expiresAt: number; probe: ExternalApiProbe }>();
+const externalApiProbeInflight = new Map<string, Promise<ExternalApiProbe>>();
+
+export function resetExternalApiProbeCache(): void {
+  externalApiProbeCache.clear();
+  externalApiProbeInflight.clear();
+}
+
+/**
+ * Short in-process cache so repeat diagnostics calls do not probe GitHub and Netlify every time.
+ * In-flight probes are shared. The cached value is reachability only, never a token.
+ */
+async function probeExternalApi(url: string, init: RequestInit): Promise<ExternalApiProbe> {
+  const cached = externalApiProbeCache.get(url);
+
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.probe;
+  }
+
+  const pending = externalApiProbeInflight.get(url);
+
+  if (pending) {
+    return pending;
+  }
+
+  const request = fetchExternalApiProbe(url, init).finally(() => {
+    externalApiProbeInflight.delete(url);
+  });
+
+  externalApiProbeInflight.set(url, request);
+
+  return request;
+}
+
+async function fetchExternalApiProbe(url: string, init: RequestInit): Promise<ExternalApiProbe> {
+  let probe: ExternalApiProbe;
+
+  try {
+    const response = await fetch(url, init);
+    await response.body?.cancel().catch(() => undefined);
+
+    probe = {
+      isReachable: response.ok,
+      status: response.status,
+      statusText: response.statusText,
+    };
+  } catch (error) {
+    probe = {
+      isReachable: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  externalApiProbeCache.set(url, { expiresAt: Date.now() + EXTERNAL_API_PROBE_TTL_MS, probe });
+
+  return probe;
+}
+
 export const loader: LoaderFunction = async ({ request, context }: LoaderFunctionArgs & { context: AppContext }) => {
   // Get environment variables
   const envVars = {
@@ -63,48 +130,16 @@ export const loader: LoaderFunction = async ({ request, context }: LoaderFunctio
     gitInfo: '/api/system/git-info',
   };
 
-  // Test GitHub API connectivity
-  let githubApiStatus;
+  const githubApiStatus = await probeExternalApi(GITHUB_ZEN_URL, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/vnd.github.v3+json',
+    },
+  });
 
-  try {
-    const githubResponse = await fetch('https://api.github.com/zen', {
-      method: 'GET',
-      headers: {
-        Accept: 'application/vnd.github.v3+json',
-      },
-    });
-
-    githubApiStatus = {
-      isReachable: githubResponse.ok,
-      status: githubResponse.status,
-      statusText: githubResponse.statusText,
-    };
-  } catch (error) {
-    githubApiStatus = {
-      isReachable: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-
-  // Test Netlify API connectivity
-  let netlifyApiStatus;
-
-  try {
-    const netlifyResponse = await fetch('https://api.netlify.com/api/v1/', {
-      method: 'GET',
-    });
-
-    netlifyApiStatus = {
-      isReachable: netlifyResponse.ok,
-      status: netlifyResponse.status,
-      statusText: netlifyResponse.statusText,
-    };
-  } catch (error) {
-    netlifyApiStatus = {
-      isReachable: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
+  const netlifyApiStatus = await probeExternalApi(NETLIFY_API_URL, {
+    method: 'GET',
+  });
 
   // Provide technical details about the environment
   const technicalDetails = {

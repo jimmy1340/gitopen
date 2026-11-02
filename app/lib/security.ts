@@ -125,16 +125,46 @@ function pruneRateLimitStore(now: number): void {
 }
 
 /**
- * Get client IP address from request
+ * Shared by every request that does not carry Cloudflare's client IP.
+ * Forged X-Forwarded-For / X-Real-IP values must not each become their own key.
  */
-function getClientIP(request: Request): string {
-  // Try various headers that might contain the real IP
-  const forwardedFor = request.headers.get('x-forwarded-for');
-  const realIP = request.headers.get('x-real-ip');
-  const cfConnectingIP = request.headers.get('cf-connecting-ip');
+const SHARED_UNPROXIED_CLIENT = 'unknown';
 
-  // Return the first available IP or a fallback
-  return cfConnectingIP || realIP || forwardedFor?.split(',')[0]?.trim() || 'unknown';
+/**
+ * `TRUSTED_PROXY=1|true|yes` means this process is behind a proxy that overwrites
+ * forwarding headers. Otherwise those headers are client-controlled.
+ */
+function isTrustedProxyEnabled(): boolean {
+  const flag = process.env.TRUSTED_PROXY?.trim().toLowerCase();
+
+  return flag === '1' || flag === 'true' || flag === 'yes';
+}
+
+/**
+ * Prefer `cf-connecting-ip` (Cloudflare overwrites it).
+ * Honor `x-real-ip` / `x-forwarded-for` only when the deploy sets `TRUSTED_PROXY`.
+ * Without that flag, requests that lack a CF header share one in-process bucket.
+ */
+export function getClientIP(request: Request): string {
+  const cfConnectingIP = request.headers.get('cf-connecting-ip')?.trim();
+
+  if (cfConnectingIP) {
+    return cfConnectingIP;
+  }
+
+  if (!isTrustedProxyEnabled()) {
+    return SHARED_UNPROXIED_CLIENT;
+  }
+
+  const realIP = request.headers.get('x-real-ip')?.trim();
+
+  if (realIP) {
+    return realIP;
+  }
+
+  const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+
+  return forwardedFor || SHARED_UNPROXIED_CLIENT;
 }
 
 /**
