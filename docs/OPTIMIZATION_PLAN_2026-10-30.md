@@ -1,6 +1,6 @@
 # GitOpen 优化计划（2026-10-30 → 2026-11-05）
 
-审查基线是 `main` @ `f0d2f75`（含已合并的 [#1](https://github.com/jimmy1340/gitopen/pull/1)、[#2](https://github.com/jimmy1340/gitopen/pull/2)、[#3](https://github.com/jimmy1340/gitopen/pull/3)）。Day 1 的实现是 [#4](https://github.com/jimmy1340/gitopen/pull/4)（分支 `cursor/day1-request-safety-18b7`），已合并。Day 2 的实现是 [#5](https://github.com/jimmy1340/gitopen/pull/5)（分支 `cursor/day2-github-repo-coordinates-85ec`）。Day 3 的实现是 [#6](https://github.com/jimmy1340/gitopen/pull/6)（分支 `cursor/day3-github-stats-pagination-699b`）。Day 4 的实现是 [#7](https://github.com/jimmy1340/gitopen/pull/7)（分支 `cursor/day4-diagnostics-ratelimit-0335`）。Day 5 的实现见分支 `cursor/day5-error-query-secrets-9aa3`（PR 链接待补）。
+审查基线是 `main` @ `f0d2f75`（含已合并的 [#1](https://github.com/jimmy1340/gitopen/pull/1)、[#2](https://github.com/jimmy1340/gitopen/pull/2)、[#3](https://github.com/jimmy1340/gitopen/pull/3)）。Day 1 的实现是 [#4](https://github.com/jimmy1340/gitopen/pull/4)（分支 `cursor/day1-request-safety-18b7`），已合并。Day 2 的实现是 [#5](https://github.com/jimmy1340/gitopen/pull/5)（分支 `cursor/day2-github-repo-coordinates-85ec`）。Day 3 的实现是 [#6](https://github.com/jimmy1340/gitopen/pull/6)（分支 `cursor/day3-github-stats-pagination-699b`）。Day 4 的实现是 [#7](https://github.com/jimmy1340/gitopen/pull/7)（分支 `cursor/day4-diagnostics-ratelimit-0335`）。Day 5 的实现是 [#8](https://github.com/jimmy1340/gitopen/pull/8)（分支 `cursor/day5-error-query-secrets-9aa3`）。
 
 - **#1** 限制了 API key 导出、MCP stdio，并给 git proxy 加了私网与重定向校验。`POST /api/github-user` 的 `get_token` 仍会把解析到的 token（含服务器环境变量）返回给未认证调用方；GitLab 路由仍把调用方提供的 `gitlabUrl` 交给 `fetch` 且默认跟随重定向。
 - **#2** 是界面与侧边栏修复。本次审查没有发现需要在本周第一天改动的界面回归，后续几天也不做大块 UI 重构。
@@ -104,7 +104,7 @@
 
 ## Day 5 — 2026-11-03（Done）
 
-**状态：Done。** 实现见分支 `cursor/day5-error-query-secrets-9aa3`（PR 链接待补）。
+**状态：Done。** 实现见 [#8](https://github.com/jimmy1340/gitopen/pull/8)（分支 `cursor/day5-error-query-secrets-9aa3`）。
 
 错误响应与查询参数里不再带出凭证或堆栈。成功的 Supabase 查询结果仍原样返回。Vercel 部署 URL 仍优先用 `deploy.url`，否则用 `project.url`。
 
