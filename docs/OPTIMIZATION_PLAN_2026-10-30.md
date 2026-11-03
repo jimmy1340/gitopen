@@ -1,6 +1,6 @@
 # GitOpen 优化计划（2026-10-30 → 2026-11-05）
 
-审查基线是 `main` @ `f0d2f75`（含已合并的 [#1](https://github.com/jimmy1340/gitopen/pull/1)、[#2](https://github.com/jimmy1340/gitopen/pull/2)、[#3](https://github.com/jimmy1340/gitopen/pull/3)）。Day 1 的实现是 [#4](https://github.com/jimmy1340/gitopen/pull/4)（分支 `cursor/day1-request-safety-18b7`），已合并。Day 2 的实现是 [#5](https://github.com/jimmy1340/gitopen/pull/5)（分支 `cursor/day2-github-repo-coordinates-85ec`）。Day 3 的实现是 [#6](https://github.com/jimmy1340/gitopen/pull/6)（分支 `cursor/day3-github-stats-pagination-699b`）。Day 4 的实现是 [#7](https://github.com/jimmy1340/gitopen/pull/7)（分支 `cursor/day4-diagnostics-ratelimit-0335`）。
+审查基线是 `main` @ `f0d2f75`（含已合并的 [#1](https://github.com/jimmy1340/gitopen/pull/1)、[#2](https://github.com/jimmy1340/gitopen/pull/2)、[#3](https://github.com/jimmy1340/gitopen/pull/3)）。Day 1 的实现是 [#4](https://github.com/jimmy1340/gitopen/pull/4)（分支 `cursor/day1-request-safety-18b7`），已合并。Day 2 的实现是 [#5](https://github.com/jimmy1340/gitopen/pull/5)（分支 `cursor/day2-github-repo-coordinates-85ec`）。Day 3 的实现是 [#6](https://github.com/jimmy1340/gitopen/pull/6)（分支 `cursor/day3-github-stats-pagination-699b`）。Day 4 的实现是 [#7](https://github.com/jimmy1340/gitopen/pull/7)（分支 `cursor/day4-diagnostics-ratelimit-0335`）。Day 5 的实现是 [#8](https://github.com/jimmy1340/gitopen/pull/8)（分支 `cursor/day5-error-query-secrets-9aa3`）。
 
 - **#1** 限制了 API key 导出、MCP stdio，并给 git proxy 加了私网与重定向校验。`POST /api/github-user` 的 `get_token` 仍会把解析到的 token（含服务器环境变量）返回给未认证调用方；GitLab 路由仍把调用方提供的 `gitlabUrl` 交给 `fetch` 且默认跟随重定向。
 - **#2** 是界面与侧边栏修复。本次审查没有发现需要在本周第一天改动的界面回归，后续几天也不做大块 UI 重构。
@@ -102,13 +102,21 @@
 - `app/lib/security.ts`、`app/lib/security.spec.ts`
 - `app/routes/api.llmcall.ts`、`app/lib/api/llmcall.spec.ts`
 
-## Day 5 — 2026-11-03
+## Day 5 — 2026-11-03（Done）
 
-错误响应与查询参数里不再带出凭证或堆栈。
+**状态：Done。** 实现见 [#8](https://github.com/jimmy1340/gitopen/pull/8)（分支 `cursor/day5-error-query-secrets-9aa3`）。
 
-- `app/routes/api.supabase.query.ts`：`projectId` 限制为 Supabase 项目 id 字符集；500 响应去掉 `stack`；日志不打印完整 SQL。成功时仍原样返回查询结果。
-- `app/components/chat/VercelDeploymentLink.client.tsx` 与 `app/routes/api.vercel-deploy.ts`：GET 查询串中的 `token` 改为请求头或 POST body，避免 token 进入访问日志。部署 URL 的解析结果不变。
+错误响应与查询参数里不再带出凭证或堆栈。成功的 Supabase 查询结果仍原样返回。Vercel 部署 URL 仍优先用 `deploy.url`，否则用 `project.url`。
+
+- `app/routes/api.supabase.query.ts`：`projectId` 必须匹配 Supabase 项目 ref（`^[a-z]{20}$`，与 CLI 示例 `abcdefghijklmnopqrst` 相同）。非法值返回 400 `{ error: { message: 'Project ID is not allowed' } }`，且不会带 Authorization 出站。500 响应不再包含 `stack`；上游错误 JSON 里的 `stack` 字段也会去掉。日志只记录 project id 与查询字节数，不打印 SQL 原文。
+- `app/components/chat/VercelDeploymentLink.client.tsx` 与 `app/routes/api.vercel-deploy.ts`：回退查找改为 `GET /api/vercel-deploy?projectId=...`，token 放在 `Authorization: Bearer`，不再出现在查询串。服务端不再读取查询串中的 `token`。已有的部署 POST 仍从 JSON body 读取 token。
 - 验收：非法 `projectId` 为 400；故意失败的查询响应 JSON 不含 `stack`；Vercel 回退请求的 URL 不含 `token=`。
+
+### 涉及文件
+
+- `app/routes/api.supabase.query.ts`、`app/lib/api/supabase-query.spec.ts`
+- `app/lib/api/vercel-fallback.ts`、`app/routes/api.vercel-deploy.ts`、`app/lib/api/vercel-deploy.spec.ts`
+- `app/components/chat/VercelDeploymentLink.client.tsx`、`app/components/chat/VercelDeploymentLink.spec.ts`
 
 ## Day 6 — 2026-11-04
 

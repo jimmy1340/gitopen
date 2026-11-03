@@ -1,4 +1,5 @@
 import { type ActionFunctionArgs, type LoaderFunctionArgs, json } from '@remix-run/cloudflare';
+import { readBearerToken } from '~/lib/api/vercel-fallback';
 import type { VercelProjectInfo } from '~/types/vercel';
 
 // Function to detect framework from project files
@@ -172,11 +173,13 @@ const detectFramework = (files: Record<string, string>): string => {
   return 'other';
 };
 
-// Add loader function to handle GET requests
+/*
+ * GET lookup. The token is read from Authorization so it is not written to access logs.
+ */
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const projectId = url.searchParams.get('projectId');
-  const token = url.searchParams.get('token');
+  const token = readBearerToken(request);
 
   if (!projectId || !token) {
     return json({ error: 'Missing projectId or token' }, { status: 400 });

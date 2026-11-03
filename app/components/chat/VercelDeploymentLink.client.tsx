@@ -1,6 +1,7 @@
 import { useStore } from '@nanostores/react';
 import { vercelConnection } from '~/lib/stores/vercel';
 import { chatId } from '~/lib/persistence/useChatHistory';
+import { vercelDeploymentFallbackRequest } from '~/lib/api/vercel-fallback';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { useEffect, useState } from 'react';
 
@@ -101,10 +102,12 @@ export function VercelDeploymentLink() {
           }
         }
 
-        // Fallback to API call if not found in fetched projects
-        const fallbackResponse = await fetch(`/api/vercel-deploy?projectId=${projectId}&token=${connection.token}`, {
-          method: 'GET',
-        });
+        /*
+         * Fallback to API call if not found in fetched projects.
+         * Token travels in the Authorization header, not the query string.
+         */
+        const fallback = vercelDeploymentFallbackRequest(projectId, connection.token);
+        const fallbackResponse = await fetch(fallback.url, fallback.init);
 
         const data = await fallbackResponse.json();
 
