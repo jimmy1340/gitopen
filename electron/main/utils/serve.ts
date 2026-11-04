@@ -5,6 +5,7 @@ import { createReadStream, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { app } from 'electron';
+import { resolveAssetPath } from './asset-path';
 import { isDev } from './constants';
 
 export async function loadServerBuild(): Promise<any> {
@@ -37,13 +38,22 @@ export async function loadServerBuild(): Promise<any> {
 // serve assets built by vite.
 export async function serveAsset(req: Request, assetsPath: string): Promise<Response | undefined> {
   const url = new URL(req.url);
-  const fullPath = path.join(assetsPath, decodeURIComponent(url.pathname));
-  console.log('Serving asset, path:', fullPath);
+  const decodedPathname = decodeURIComponent(url.pathname);
 
-  if (!fullPath.startsWith(assetsPath)) {
-    console.log('Path is outside assets directory:', fullPath);
+  /*
+   * URL pathnames are absolute (`/app.js`). Drop one leading slash so the file
+   * resolves inside the asset root. `..`, prefix siblings, and a remaining
+   * absolute path are rejected by resolveAssetPath.
+   */
+  const pathname = decodedPathname.startsWith('/') ? decodedPathname.slice(1) : decodedPathname;
+  const fullPath = resolveAssetPath(assetsPath, pathname);
+
+  if (!fullPath) {
+    console.log('Path is outside assets directory:', decodedPathname);
     return;
   }
+
+  console.log('Serving asset, path:', fullPath);
 
   const stat = await fs.stat(fullPath).catch((err) => {
     console.log('Failed to stat file:', fullPath, err);

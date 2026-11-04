@@ -1,6 +1,6 @@
 # GitOpen 优化计划（2026-10-30 → 2026-11-05）
 
-审查基线是 `main` @ `f0d2f75`（含已合并的 [#1](https://github.com/jimmy1340/gitopen/pull/1)、[#2](https://github.com/jimmy1340/gitopen/pull/2)、[#3](https://github.com/jimmy1340/gitopen/pull/3)）。Day 1 的实现是 [#4](https://github.com/jimmy1340/gitopen/pull/4)（分支 `cursor/day1-request-safety-18b7`），已合并。Day 2 的实现是 [#5](https://github.com/jimmy1340/gitopen/pull/5)（分支 `cursor/day2-github-repo-coordinates-85ec`）。Day 3 的实现是 [#6](https://github.com/jimmy1340/gitopen/pull/6)（分支 `cursor/day3-github-stats-pagination-699b`）。Day 4 的实现是 [#7](https://github.com/jimmy1340/gitopen/pull/7)（分支 `cursor/day4-diagnostics-ratelimit-0335`）。Day 5 的实现是 [#8](https://github.com/jimmy1340/gitopen/pull/8)（分支 `cursor/day5-error-query-secrets-9aa3`）。
+审查基线是 `main` @ `f0d2f75`（含已合并的 [#1](https://github.com/jimmy1340/gitopen/pull/1)、[#2](https://github.com/jimmy1340/gitopen/pull/2)、[#3](https://github.com/jimmy1340/gitopen/pull/3)）。Day 1 的实现是 [#4](https://github.com/jimmy1340/gitopen/pull/4)（分支 `cursor/day1-request-safety-18b7`），已合并。Day 2 的实现是 [#5](https://github.com/jimmy1340/gitopen/pull/5)（分支 `cursor/day2-github-repo-coordinates-85ec`）。Day 3 的实现是 [#6](https://github.com/jimmy1340/gitopen/pull/6)（分支 `cursor/day3-github-stats-pagination-699b`）。Day 4 的实现是 [#7](https://github.com/jimmy1340/gitopen/pull/7)（分支 `cursor/day4-diagnostics-ratelimit-0335`）。Day 5 的实现是 [#8](https://github.com/jimmy1340/gitopen/pull/8)（分支 `cursor/day5-error-query-secrets-9aa3`）。Day 6 的实现是 [#9](https://github.com/jimmy1340/gitopen/pull/9)（分支 `cursor/day6-asset-path-boundary-fc94`）。
 
 - **#1** 限制了 API key 导出、MCP stdio，并给 git proxy 加了私网与重定向校验。`POST /api/github-user` 的 `get_token` 仍会把解析到的 token（含服务器环境变量）返回给未认证调用方；GitLab 路由仍把调用方提供的 `gitlabUrl` 交给 `fetch` 且默认跟随重定向。
 - **#2** 是界面与侧边栏修复。本次审查没有发现需要在本周第一天改动的界面回归，后续几天也不做大块 UI 重构。
@@ -118,13 +118,20 @@
 - `app/lib/api/vercel-fallback.ts`、`app/routes/api.vercel-deploy.ts`、`app/lib/api/vercel-deploy.spec.ts`
 - `app/components/chat/VercelDeploymentLink.client.tsx`、`app/components/chat/VercelDeploymentLink.spec.ts`
 
-## Day 6 — 2026-11-04
+## Day 6 — 2026-11-04（Done）
 
-Electron 静态资源路径不能靠 `startsWith` 判断是否越界。
+**状态：Done。** 实现见 [#9](https://github.com/jimmy1340/gitopen/pull/9)（分支 `cursor/day6-asset-path-boundary-fc94`）。
 
-- `electron/main/utils/serve.ts` 的 `serveAsset`：`path.join(assetsPath, pathname)` 在 `assetsPath` 为 `/app/assets`、pathname 为 `/../assets-evil/secret` 时会得到 `/app/assets-evil/...`，`startsWith('/app/assets')` 仍为真。
-- 抽出不依赖 Electron 的纯函数（例如 `resolveAssetPath(root, pathname)`）：`path.resolve` 之后必须仍落在 `root + sep` 下，拒绝目录前缀兄弟路径。
-- 验收：单元测试覆盖根目录内文件、`..`、前缀兄弟目录、绝对路径；目录内文件仍返回可读流。不改窗口或打包配置。
+Electron 静态资源路径不能靠 `startsWith` 判断是否越界。目录内文件仍返回可读流。不改窗口或打包配置。
+
+- `electron/main/utils/serve.ts` 的 `serveAsset` 原先 `path.join(assetsPath, pathname)`。`assetsPath` 为 `/app/assets`、pathname 为 `/../assets-evil/secret` 时得到 `/app/assets-evil/...`，`startsWith('/app/assets')` 仍为真。
+- 纯函数 `resolveAssetPath(root, pathname)`（`electron/main/utils/asset-path.ts`）不依赖 Electron。`path.resolve` 之后结果必须仍落在 `root + sep` 下，因此前缀兄弟目录、`..` 以及落到根外的绝对路径都会拒绝。
+- `serveAsset` 使用该函数。URL pathname 去掉一个前导 `/` 后再解析，所以 `/app.js` 仍落在资源根内。
+- 验收：单元测试覆盖根目录内文件、`..`、前缀兄弟目录、绝对路径；目录内文件仍返回可读流。
+
+### 涉及文件
+
+- `electron/main/utils/asset-path.ts`、`electron/main/utils/serve.ts`、`electron/main/utils/serve.spec.ts`
 
 ## Day 7 — 2026-11-05
 
